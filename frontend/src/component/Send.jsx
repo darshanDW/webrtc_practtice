@@ -5,19 +5,13 @@ function Sender() {
     const [socket, setSocket] = useState(null);
     const roomId = 'room1'; // Example room ID
     const [pc, setPc] = useState();
+    const [isNegotiating, setIsNegotiating] = useState(false);
+
     useEffect(() => {
         const s = io("http://localhost:3001");
         setSocket(s);
 
         s.emit('join-room', { roomId, type: "sender" });
-
-        s.on('receive-offer', offer => {
-            console.log('Received offer in sender:', offer);
-        });
-
-        return () => {
-            s.disconnect();
-        };
 
         return () => {
             s.disconnect();
@@ -25,45 +19,61 @@ function Sender() {
     }, []);
 
     const sendOffer = async () => {
-        const offer = 4; // Your offer data
-        console.log(offer);
-
         const pc = new RTCPeerConnection();
         setPc(pc);
+
         if (socket) {
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', event.candidate);
+                    console.log("candidate created");
+                }
+            };
 
             pc.onnegotiationneeded = async () => {
+                if (isNegotiating) return;
+                setIsNegotiating(true);
 
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('create-offer', pc.localDescription);
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('create-offer', pc.localDescription);
+                    console.log("offer sent");
+                    getCameraStreamAndSend(pc);
 
-                console.log('Sent offer:', offer);
-                getCameraStreamAndSend(pc);
 
-            }
+                } finally {
+                    setIsNegotiating(false);
+
+                }
+            };
+
             socket.on('receive-answer', answer => {
                 pc.setRemoteDescription(answer);
-                console.log(answer.sdp);
-            })
+                console.log("answer received");
+            });
 
+            socket.on('receive-candidate', candidate => {
+                pc.addIceCandidate(candidate);
+                console.log("candidate received");
+            });
+
+            getCameraStreamAndSend(pc);
         }
-
-        getCameraStreamAndSend(pc);
-
     };
+
     const getCameraStreamAndSend = (pc) => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-
             stream.getTracks().forEach((track) => {
-                pc.addTrack(track);
+                pc.addTrack(track, stream);
             });
+            const video = document.getElementById('2');
         });
     };
+
     return (
         <div>
             <button onClick={sendOffer}>Send Video</button>
-            <video autoPlay id='2'></video>
         </div>
     );
 }

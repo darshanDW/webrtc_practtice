@@ -4,56 +4,53 @@ import { io } from 'socket.io-client';
 function Receiver() {
   const [socket, setSocket] = useState(null);
   const roomId = 'room1'; // Example room ID
-  const videoRef = useRef(null);
-  // const videoRef = useRef(HTMLVideoElement);
+
   useEffect(() => {
     const s = io("http://localhost:3001");
     setSocket(s);
 
     s.emit('join-room', { roomId, type: "receiver" });
 
-
-    return () => {
-      s.disconnect();
-    };
-
     return () => {
       s.disconnect();
     };
   }, []);
 
-  if (socket) {
-    socket.on('receive-offer', async offer => {
-      console.log(offer);
+  useEffect(() => {
+    if (socket) {
       const pc = new RTCPeerConnection();
-      pc.setRemoteDescription(offer);
 
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice-candidate', event.candidate);
+          console.log("candidate created");
+        }
+      };
+
+      socket.on('receive-offer', async (offer) => {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        console.log("offer received");
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('create-answer', pc.localDescription);
+        console.log("answer sent");
+      });
+
+      socket.on('receive-candidate', (candidate) => {
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("candidate received");
+      });
 
       const video = document.getElementById('1');
-
-
-      // If not, create a new MediaStream and assign it to srcObject
       pc.ontrack = (event) => {
-        console.log(event.track);
-        video.srcObject = new MediaStream([event.track]);
-
-        console.log(video.srcObject);
-        console.log(1);
-
-
-        // Add the new track to the existing MediaStream
+        if (!video.srcObject) {
+          video.srcObject = new MediaStream();
+        }
         video.srcObject.addTrack(event.track);
-        console.log(video.srcObject);
-
-      }
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      console.log(answer);
-      socket.emit('create-answer', pc.localDescription);
-    });
-  }
-
+      };
+    }
+  }, [socket]);
 
   return (
     <div>

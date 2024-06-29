@@ -17,24 +17,33 @@ io.on("connection", socket => {
 
     socket.on("join-room", ({ roomId, type }) => {
         socket.join(roomId);
-        console.log(`${type} joined room ${roomId}`);
+
 
         if (type === "sender") {
+            console.log("sender join")
             socket.on('create-offer', offer => {
-                console.log(`Offer from sender in room ${roomId}:`, offer);
+                console.log("offer created")
                 socket.broadcast.to(roomId).emit('receive-offer', offer);
+                console.log("offer send")
             });
 
         }
+        else { console.log("reciever join"); }
         socket.on('create-answer', answer => {
-            console.log(1);
-            console.log(answer);
+            console.log("answer created")
             socket.broadcast.to(roomId).emit('receive-answer', answer);
+            console.log("answer send");
 
+        })
+        socket.on('ice-candidate', candidate => {
+            console.log("candidate created");
+            socket.to(roomId).emit('recieve-candidate', candidate);
+            console.log("candidate send")
         })
 
         socket.on('disconnect', () => {
             console.log('socket disconnected');
         });
     });
-});
+
+}); 
